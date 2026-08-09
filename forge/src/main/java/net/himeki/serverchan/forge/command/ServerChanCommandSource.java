@@ -19,9 +19,9 @@ import net.himeki.serverchan.ServerChanCore;
 
 public class ServerChanCommandSource implements CommandSource {
     #if MC_VER >= MC_1_19
-    private static final Component ServerChanText = Component.literal("ServerChan");
+    private static final Component ServerChanText = Component.literal("Joi");
     #else
-    private static final Component ServerChanText = new TextComponent("ServerChan");
+    private static final Component ServerChanText = new TextComponent("Joi");
     #endif
     private final StringBuffer buffer = new StringBuffer();
     private final MinecraftServer server;
@@ -44,7 +44,7 @@ public class ServerChanCommandSource implements CommandSource {
 
     public CommandSourceStack createCommandSourceStack(int permissionLevel) {
         ServerLevel overWorld = this.server.overworld();
-        return new CommandSourceStack(this, Vec3.ZERO, Vec2.ZERO, overWorld, permissionLevel, "ServerChan", ServerChanText, this.server, null);
+        return new CommandSourceStack(this, Vec3.ZERO, Vec2.ZERO, overWorld, permissionLevel, "Joi", ServerChanText, this.server, null);
     }
 
     public String runCommand(String cmd) {

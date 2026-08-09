@@ -125,7 +125,7 @@ public class SpigotCommandExecutor implements CommandExecutor {
 
         @Override
         public String getName() {
-            return "ServerChan";
+            return "Joi";
         }
 
         @Override

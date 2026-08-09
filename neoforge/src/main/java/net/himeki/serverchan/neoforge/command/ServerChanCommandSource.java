@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import net.himeki.serverchan.ServerChanCore;
 
 public class ServerChanCommandSource implements CommandSource {
-    private static final Component ServerChanText = Component.literal("ServerChan");
+    private static final Component ServerChanText = Component.literal("Joi");
     private final StringBuffer buffer = new StringBuffer();
     private final MinecraftServer server;
 
@@ -36,7 +36,7 @@ public class ServerChanCommandSource implements CommandSource {
 
     public CommandSourceStack createCommandSourceStack(int permissionLevel) {
         ServerLevel overWorld = this.server.overworld();
-        return new CommandSourceStack(this, Vec3.ZERO, Vec2.ZERO, overWorld, permissionLevel, "ServerChan", ServerChanText, this.server, null);
+        return new CommandSourceStack(this, Vec3.ZERO, Vec2.ZERO, overWorld, permissionLevel, "Joi", ServerChanText, this.server, null);
     }
 
     public String runCommand(String cmd) {
