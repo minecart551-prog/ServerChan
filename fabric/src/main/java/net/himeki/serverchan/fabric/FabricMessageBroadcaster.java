@@ -1,18 +1,16 @@
 package net.himeki.serverchan.fabric;
 
 import net.himeki.serverchan.MessageBroadcaster;
+import net.himeki.serverchan.i18n.I18n;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
-#if MC_VER < MC_1_19
-import net.minecraft.network.chat.TextComponent;
-#if MC_VER >= MC_1_16
-import net.minecraft.network.chat.ChatType;
-import java.util.UUID;
-#endif
-#endif
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Fabric implementation of MessageBroadcaster
+ * Uses /say command so Discord bridge mods pick up the messages.
  */
 public class FabricMessageBroadcaster implements MessageBroadcaster {
     private MinecraftServer server;
@@ -28,16 +26,20 @@ public class FabricMessageBroadcaster implements MessageBroadcaster {
     @Override
     public void broadcastMessage(String message) {
         if (server != null) {
-            // Ensure execution on the main server thread for thread safety
             server.execute(() -> {
                 if (server.getPlayerList() != null) {
-                    #if MC_VER >= MC_1_19
-                    server.getPlayerList().broadcastSystemMessage(Component.literal(message), false);
-                    #elif MC_VER >= MC_1_16
-                    server.getPlayerList().broadcastMessage(new TextComponent(message), ChatType.SYSTEM, UUID.randomUUID());
-                    #else
-                    server.getPlayerList().broadcastMessage(new TextComponent(message));
-                    #endif
+                    try {
+                        String botName = I18n.get("bot.name");
+                        Component nameComponent = Component.literal(botName);
+                        CommandSourceStack source = new CommandSourceStack(
+                                server, Vec3.ZERO, Vec2.ZERO,
+                                server.overworld(), 2,
+                                botName, nameComponent, server, null
+                        );
+                        server.getCommands().getDispatcher().execute("say " + message, source);
+                    } catch (Exception e) {
+                        // fallback
+                    }
                 }
             });
         }

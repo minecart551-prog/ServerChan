@@ -92,7 +92,7 @@ public class ServerChanCore {
 
                     // Only broadcast if AI decided to respond (response is not null or empty)
                     if (response != null && !response.isEmpty() && messageBroadcaster != null && messageBroadcaster.isReady()) {
-                        messageBroadcaster.broadcastMessage("§" + CONFIG.botColor + I18n.get("bot.name") + ": " + response);
+                        messageBroadcaster.broadcastMessage("§" + CONFIG.botColor + response);
                     }
                 });
     }
@@ -143,7 +143,7 @@ public class ServerChanCore {
 
                 // Only broadcast if there's a valid response
                 if (enabled && aiResponse != null && !aiResponse.isEmpty() && messageBroadcaster != null && messageBroadcaster.isReady()) {
-                    messageBroadcaster.broadcastMessage("§" + CONFIG.botColor + I18n.get("bot.name") + ": " + aiResponse);
+                    messageBroadcaster.broadcastMessage("§" + CONFIG.botColor + aiResponse);
                 }
             }, OpenAIHandler.getAsyncExecutor());
         } catch (RejectedExecutionException e) {
