@@ -75,5 +75,8 @@
   "handler.command.broadcast": "%s executed command: /%s",
   "handler.command.error": "Error executing command '/%s': %s",
 
-  "prompt.dev.easteregg": "Special: If the player is Hork_ or Grider_, treat them as onii-chan and make special reactions at appropriate times."
+  "prompt.dev.easteregg": "Special: If the player is Hork_ or Grider_, treat them as onii-chan and make special reactions at appropriate times.",
+
+  "mention.filter.skipped.chat": "[MENTION-ONLY] Ignored message from %s - no mention keyword found",
+  "mention.filter.skipped.event": "[MENTION-ONLY] Ignored event %s - mention-only mode active"
 }

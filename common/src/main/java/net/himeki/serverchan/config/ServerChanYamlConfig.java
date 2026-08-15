@@ -3,6 +3,9 @@ package net.himeki.serverchan.config;
 import de.exlll.configlib.Comment;
 import de.exlll.configlib.Configuration;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * ConfigLib-based YAML configuration for ServerChan.
  * This configuration is platform-independent and works across all loaders
@@ -45,6 +48,9 @@ public class ServerChanYamlConfig {
 
         @Comment({"", "AI model to use for generating responses", "用于生成响应的AI模型", "応答生成に使用するAIモデル"})
         public String model = "gpt-5.1";
+
+        @Comment({"", "Fallback models to try if the primary model fails (rate limit, timeout, etc.)", "主模型失败时尝试的备选模型 (限流、超时等)", "プライマリモデルが失敗した場合に試すフォールバックモデル (レート制限、タイムアウトなど)"})
+        public List<String> fallbackModels = new ArrayList<>();
 
         @Comment({"", "Temperature controls randomness (0=deterministic, 2=very random)", "温度控制随机性 (0=确定性, 2=非常随机)", "温度はランダム性を制御 (0=確定的, 2=非常にランダム)"})
         public double temperature = 1.0;
@@ -114,6 +120,12 @@ public class ServerChanYamlConfig {
 
         @Comment({""})
         public boolean disableDevEasterEgg = false;
+
+        @Comment({"", "Only respond to messages that mention the bot (saves AI tokens)", "仅响应提及机器人的消息 (节省AI代币)", "ボットに言及したメッセージのみに応答 (AIトークン節約)"})
+        public boolean onlyRespondToMention = false;
+
+        @Comment({"", "Keywords that trigger bot response when onlyRespondToMention is enabled (case-insensitive)", "启用onlyRespondToMention时触发机器人响应的关键词 (不区分大小写)", "onlyRespondToMention有効時にボット応答をトリガーするキーワード (大文字小文字不問)"})
+        public List<String> mentionKeywords = new ArrayList<>(java.util.Arrays.asList("Joi"));
     }
 
     /**
@@ -173,6 +185,7 @@ public class ServerChanYamlConfig {
         base.openaiApiKey = openai.apiKey;
         base.openaiBaseUrl = openai.baseUrl;
         base.model = openai.model;
+        base.fallbackModels = new ArrayList<>(openai.fallbackModels);
         base.temperature = openai.temperature;
         base.responseGenerationSystemMessage = openai.prompts.responseGenerationSystemMessage;
 
@@ -192,6 +205,8 @@ public class ServerChanYamlConfig {
         base.contextSize = bot.contextSize;
         base.inheritCmdSourcePermission = bot.inheritCmdSourcePermission;
         base.disableDevEasterEgg = bot.disableDevEasterEgg;
+        base.onlyRespondToMention = bot.onlyRespondToMention;
+        base.mentionKeywords = new ArrayList<>(bot.mentionKeywords);
 
         // Game events
         base.enableGameEvents = events.enabled;

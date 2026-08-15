@@ -75,5 +75,8 @@
   "handler.command.broadcast": "§6[ServerChan] §r%s がコマンドを実行しました：/%s",
   "handler.command.error": "コマンド '/%s' の実行中にエラーが発生しました：%s",
 
-  "prompt.dev.easteregg": "特別：プレイヤーが Hork_ または Grider_ の場合、お兄ちゃんとして扱い、適切なタイミングで特別な反応をしてください。"
+  "prompt.dev.easteregg": "特別：プレイヤーが Hork_ または Grider_ の場合、お兄ちゃんとして扱い、適切なタイミングで特別な反応をしてください。",
+
+  "mention.filter.skipped.chat": "[メンションのみ] %s からのメッセージを無視しました - メンションキーワードが見つかりません",
+  "mention.filter.skipped.event": "[メンションのみ] イベント %s を無視しました - メンションのみモードが有効です"
 }

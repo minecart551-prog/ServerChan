@@ -1,5 +1,8 @@
 package net.himeki.serverchan.config;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Base configuration class for ServerChan.
  */
@@ -52,6 +55,8 @@ public class ServerChanConfigBase {
 
     public String model = "gpt-5.1";
 
+    public List<String> fallbackModels = new ArrayList<>();
+
     public String intentionCheckerModel = "gpt-4o-mini";
 
     public boolean useIntentionChecker = true;
@@ -89,4 +94,8 @@ public class ServerChanConfigBase {
     public boolean disableDevEasterEgg = false;
 
     public boolean enabled = true;
+
+    public boolean onlyRespondToMention = false;
+
+    public List<String> mentionKeywords = new ArrayList<>(java.util.Arrays.asList("Joi"));
 }

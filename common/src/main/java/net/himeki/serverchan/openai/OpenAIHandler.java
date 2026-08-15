@@ -195,7 +195,7 @@ public class OpenAIHandler {
                     return responseFuture.get(200, TimeUnit.SECONDS);
                 } catch (Exception e) {
                     ServerChanCore.LOGGER.error("Error waiting for early response", e);
-                    return I18n.get("handler.error.generic");
+                    return null;
                 }
             }
 
@@ -274,7 +274,7 @@ public class OpenAIHandler {
                     return responseFuture.get(200, TimeUnit.SECONDS);
                 } catch (Exception e) {
                     ServerChanCore.LOGGER.error("Error waiting for early response", e);
-                    return I18n.get("handler.error.generic");
+                    return null;
                 }
             }
 
@@ -306,15 +306,13 @@ public class OpenAIHandler {
 
     /**
      * Main method to get a response from OpenAI.
-     * Will queue requests in a single thread, each with a 90s timeout.
+     * Tries the primary model first, then falls back to configured fallback models on failure.
+     * Errors are logged to console only and return null (never broadcast to players).
      */
     private static String getResponse(String sender, String input,
                                       int permissionLevel) {
-        // Always use the response generation system message
-        // (IntentionChecker handles the decision logic separately when enabled)
         String systemMessage = ServerChanCore.CONFIG.responseGenerationSystemMessage;
 
-        // Append dev easter egg prompt if not disabled
         if (!ServerChanCore.CONFIG.disableDevEasterEgg) {
             systemMessage += "\n\n" + I18n.get("prompt.dev.easteregg");
         }
@@ -324,96 +322,189 @@ public class OpenAIHandler {
             ServerChanCore.LOGGER.info("Cancelling previous OpenAI request to process new one");
             currentRequest.cancel(true);
 
-            // Add a no_message token for the cancelled request to maintain context consistency
-            // This prevents the bot from trying to respond to the previous message
             if (!reloadInProgress) {
                 messageContext.add(MessageWrapper.assistant("<|no_message_this_turn|>"));
                 ServerChanCore.LOGGER.info("Added no_message token for cancelled request");
             }
         }
 
-        // Create a conversation list: system message + user input + all stored context
-        ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
-                .model(ChatModel.of(ServerChanCore.CONFIG.model))
-                .temperature(ServerChanCore.CONFIG.temperature)
-                .addSystemMessage(systemMessage);
+        // Save context snapshot for restoration on retry
+        List<MessageWrapper> savedContext = messageContext.getMessages();
 
-        // Only add user message to context if not reloading
+        // Add user message to context
         if (!reloadInProgress) {
             messageContext.add(MessageWrapper.user(input));
         }
 
-        // Add all context messages
-        for (MessageWrapper msg : messageContext.getMessages()) {
-            msg.addToBuilder(paramsBuilder);
+        // Build ordered list of models to try: primary first, then fallbacks
+        List<String> modelsToTry = new ArrayList<>();
+        modelsToTry.add(ServerChanCore.CONFIG.model);
+        if (ServerChanCore.CONFIG.fallbackModels != null) {
+            for (String fallback : ServerChanCore.CONFIG.fallbackModels) {
+                if (fallback != null && !fallback.isEmpty() && !fallback.equals(ServerChanCore.CONFIG.model)) {
+                    modelsToTry.add(fallback);
+                }
+            }
         }
 
-        // Define function tools
-        addExecuteMinecraftCommandsTool(paramsBuilder);
+        // Try each model in sequence
+        for (int attempt = 0; attempt < modelsToTry.size(); attempt++) {
+            String model = modelsToTry.get(attempt);
+            boolean isLastAttempt = attempt == modelsToTry.size() - 1;
 
-        // Create a callable that does the heavy lifting
-        Callable<CompletionResult> task = () -> {
+            ServerChanCore.LOGGER.info("Attempting model: {} ({}/{})", model, attempt + 1, modelsToTry.size());
+
+            // Build params for this attempt (fresh builder each time)
+            ChatCompletionCreateParams.Builder paramsBuilder = ChatCompletionCreateParams.builder()
+                    .model(ChatModel.of(model))
+                    .temperature(ServerChanCore.CONFIG.temperature)
+                    .addSystemMessage(systemMessage);
+
+            for (MessageWrapper msg : messageContext.getMessages()) {
+                msg.addToBuilder(paramsBuilder);
+            }
+            addExecuteMinecraftCommandsTool(paramsBuilder);
+
+            // Create a callable that does the heavy lifting
+            Callable<CompletionResult> task = () -> {
+                try {
+                    String response = processResponse(sender, paramsBuilder, permissionLevel);
+                    return new CompletionResult(response, null);
+                } catch (Exception e) {
+                    return new CompletionResult(null, e);
+                }
+            };
+
+            // Submit the task
+            Future<CompletionResult> future = completionExecutor.submit(task);
+            currentRequest = future;
+
             try {
-                String response = processResponse(sender, paramsBuilder, permissionLevel);
-                return new CompletionResult(response, null);
-            } catch (Exception e) {
-                return new CompletionResult(null, e);
-            }
-        };
+                CompletionResult result = future.get(200, TimeUnit.SECONDS);
 
-        // Submit the task to the single-thread executor and store the future
-        Future<CompletionResult> future = completionExecutor.submit(task);
-        currentRequest = future;
+                if (result.error != null) {
+                    recordRequestException(result.error);
+                    ServerChanCore.LOGGER.error("Error in completion task with model {}: {}", model, result.error.getMessage());
 
-        try {
-            // Wait up to 200 seconds for the response (slightly more than HTTP timeout)
-            CompletionResult result = future.get(200, TimeUnit.SECONDS);
+                    if (!isLastAttempt && isRetryableError(result.error)) {
+                        ServerChanCore.LOGGER.warn("Model {} failed with retryable error, trying next fallback model", model);
+                        restoreContext(savedContext);
+                        continue;
+                    }
+                    // Non-retryable or last attempt - log and return null
+                    return null;
+                }
 
-            // If an exception occurred in the worker
-            if (result.error != null) {
-                recordRequestException(result.error);
-                ServerChanCore.LOGGER.error("Error in completion task", result.error);
-                return I18n.get("handler.error.completion");
-            }
+                if (result.response == null) {
+                    ServerChanCore.LOGGER.warn("Model {} returned empty response", model);
 
-            // Possibly the model returned no content
-            if (result.response == null) {
-                return I18n.get("handler.response.empty");
-            }
+                    if (!isLastAttempt) {
+                        ServerChanCore.LOGGER.warn("Trying next fallback model");
+                        restoreContext(savedContext);
+                        continue;
+                    }
+                    return null;
+                }
 
-            return result.response;
+                // Success
+                if (attempt > 0) {
+                    ServerChanCore.LOGGER.info("Fallback model {} responded successfully", model);
+                }
+                return result.response;
 
-        } catch (TimeoutException e) {
-            // Timed out -> cancel this request
-            future.cancel(true);
-            recordRequestException(e);
+            } catch (TimeoutException e) {
+                future.cancel(true);
+                recordRequestException(e);
+                ServerChanCore.LOGGER.warn("Request timed out with model {}", model);
 
-            // Check if we can reset or if we're in cooldown
-            long timeSinceLastReset = System.currentTimeMillis() - lastResetTime;
-            if (timeSinceLastReset >= RESET_COOLDOWN_MS) {
-                resetClient();
-                return I18n.get("handler.error.timeout.reset");
-            } else {
-                ServerChanCore.LOGGER.warn("Request timed out but reset cooldown active ({}ms remaining)",
-                    RESET_COOLDOWN_MS - timeSinceLastReset);
-                return I18n.get("handler.error.timeout.recovering");
-            }
-        } catch (InterruptedException e) {
-            // Current thread was interrupted while waiting
-            ServerChanCore.LOGGER.error("Interrupted while waiting for completion", e);
-            recordRequestException(e);
-            return I18n.get("handler.error.interrupted");
-        } catch (ExecutionException e) {
-            // Something else went wrong
-            ServerChanCore.LOGGER.error("Execution error in OpenAI task", e);
-            recordRequestException(e);
-            return I18n.get("handler.error.execution");
-        } finally {
-            // Clear the reference if this was the current request
-            if (currentRequest == future) {
-                currentRequest = null;
+                if (!isLastAttempt) {
+                    ServerChanCore.LOGGER.warn("Trying next fallback model");
+                    restoreContext(savedContext);
+                    continue;
+                }
+
+                // Last attempt - try to reset client
+                long timeSinceLastReset = System.currentTimeMillis() - lastResetTime;
+                if (timeSinceLastReset >= RESET_COOLDOWN_MS) {
+                    resetClient();
+                }
+                return null;
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                ServerChanCore.LOGGER.error("Interrupted while waiting for completion", e);
+                recordRequestException(e);
+                restoreContext(savedContext);
+                return null;
+
+            } catch (ExecutionException e) {
+                ServerChanCore.LOGGER.error("Execution error with model {}: {}", model, e.getMessage());
+                recordRequestException(e);
+
+                if (!isLastAttempt && isRetryableError(e)) {
+                    ServerChanCore.LOGGER.warn("Model {} failed, trying next fallback model", model);
+                    restoreContext(savedContext);
+                    continue;
+                }
+                return null;
+
+            } finally {
+                if (currentRequest == future) {
+                    currentRequest = null;
+                }
             }
         }
+
+        // All models failed
+        ServerChanCore.LOGGER.error("All {} model(s) failed to respond", modelsToTry.size());
+        return null;
+    }
+
+    /**
+     * Restore the message context to a previous snapshot (used for retry on fallback).
+     */
+    private static void restoreContext(List<MessageWrapper> savedContext) {
+        messageContext.clear();
+        for (MessageWrapper msg : savedContext) {
+            messageContext.add(msg);
+        }
+    }
+
+    /**
+     * Determine if an error is retryable (worth trying a fallback model for).
+     */
+    private static boolean isRetryableError(Throwable e) {
+        if (e == null) return false;
+
+        // Check by exception type name to avoid hard dependency on specific SDK classes
+        String className = e.getClass().getSimpleName();
+
+        // Always retry on these
+        if (className.contains("RateLimit") || className.contains("Timeout") ||
+            className.contains("Connection") || className.contains("Socket") ||
+            className.contains("IOException")) {
+            return true;
+        }
+
+        // Server errors are retryable
+        if (className.contains("InternalServer") || className.contains("ServiceUnavailable") ||
+            className.contains("BadGateway")) {
+            return true;
+        }
+
+        // Do NOT retry on auth/permission/parameter errors
+        if (className.contains("Authentication") || className.contains("Permission") ||
+            className.contains("BadRequest") || className.contains("InvalidRequest")) {
+            return false;
+        }
+
+        // Check cause chain
+        if (e.getCause() != null && e.getCause() != e) {
+            return isRetryableError(e.getCause());
+        }
+
+        // Default: retry (better to try fallback than give up immediately)
+        return true;
     }
 
     /**

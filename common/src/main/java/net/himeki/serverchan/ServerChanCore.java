@@ -84,6 +84,11 @@ public class ServerChanCore {
             return;
         }
 
+        if (CONFIG.onlyRespondToMention && !containsMentionKeyword(message)) {
+            LOGGER.debug(I18n.format("mention.filter.skipped.chat", playerName));
+            return;
+        }
+
         processAIResponseAsync(playerName, message, permissionLevel)
                 .thenAccept(response -> {
                     if (!enabled) {
@@ -109,6 +114,11 @@ public class ServerChanCore {
         }
 
         if (!shouldProcessEvent(eventKey)) {
+            return;
+        }
+
+        if (CONFIG.onlyRespondToMention) {
+            LOGGER.debug(I18n.format("mention.filter.skipped.event", eventKey));
             return;
         }
 
@@ -208,6 +218,22 @@ public class ServerChanCore {
         }
 
         return true;
+    }
+
+    /**
+     * Check if a message contains any of the configured mention keywords (case-insensitive).
+     */
+    private static boolean containsMentionKeyword(String message) {
+        if (message == null || CONFIG.mentionKeywords == null || CONFIG.mentionKeywords.isEmpty()) {
+            return false;
+        }
+        String lowerMessage = message.toLowerCase();
+        for (String keyword : CONFIG.mentionKeywords) {
+            if (keyword != null && !keyword.isEmpty() && lowerMessage.contains(keyword.toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
